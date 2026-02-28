@@ -8,12 +8,12 @@ import { CoworkStore } from './coworkStore';
 import { CoworkRunner } from './libs/coworkRunner';
 import { SkillManager } from './skillManager';
 import type { PermissionResult } from '@anthropic-ai/claude-agent-sdk';
-import { getCurrentApiConfig, resolveCurrentApiConfig, setStoreGetter } from './libs/claudeSettings';
+import { getCurrentApiConfig, resolveCurrentApiConfig, setStoreGetter as setClaudeSettingsStoreGetter } from './libs/claudeSettings';
 import { saveCoworkApiConfig } from './libs/coworkConfigStore';
-import { generateSessionTitle } from './libs/coworkUtil';
+import { generateSessionTitle, setStoreGetter as setCoworkUtilStoreGetter } from './libs/coworkUtil';
 import { ensureSandboxReady, getSandboxStatus, onSandboxProgress } from './libs/coworkSandboxRuntime';
 import { startCoworkOpenAICompatProxy, stopCoworkOpenAICompatProxy, setScheduledTaskDeps } from './libs/coworkOpenAICompatProxy';
-import { IMGatewayManager, IMPlatform, IMGatewayConfig } from './im';
+import { IMGatewayManager, IMPlatform, IMGatewayConfig, TunnelConfig } from './im';
 import { APP_NAME } from './appConstants';
 import { getSkillServiceManager } from './skillServices';
 import { createTray, destroyTray, updateTrayMenu } from './trayManager';
@@ -1704,6 +1704,153 @@ if (!gotTheLock) {
     }
   });
 
+  // Hina IPC Handlers
+  ipcMain.handle('im:hina:config:get', async () => {
+    try {
+      const imManager = getIMGatewayManager();
+      const config = imManager['imStore'].getHinaConfig();
+      return { success: true, config };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get Hina config',
+      };
+    }
+  });
+
+  ipcMain.handle('im:hina:config:set', async (_event, config: Partial<{ appKey: string; appSecret: string; baseUrl: string; webhookEnabled: boolean }>) => {
+    try {
+      const imManager = getIMGatewayManager();
+      imManager['imStore'].setHinaConfig(config);
+
+      // Start or stop webhook based on webhookEnabled
+      if (config.webhookEnabled !== undefined) {
+        if (config.webhookEnabled) {
+          await imManager.startHinaWebhook();
+        } else {
+          await imManager.stopHinaWebhook();
+        }
+      }
+
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to set Hina config',
+      };
+    }
+  });
+
+  ipcMain.handle('im:hina:webhook:status', async () => {
+    try {
+      const imManager = getIMGatewayManager();
+      const status = imManager.getHinaWebhookStatus();
+      return { success: true, status };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get Hina webhook status',
+      };
+    }
+  });
+
+  // ==================== Tunnel IPC Handlers ====================
+
+  ipcMain.handle('im:tunnel:config:get', async () => {
+    try {
+      const imManager = getIMGatewayManager();
+      const config = imManager.getTunnelConfig();
+      return { success: true, config };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get tunnel config',
+      };
+    }
+  });
+
+  ipcMain.handle('im:tunnel:config:set', async (_event, config: Partial<TunnelConfig>) => {
+    try {
+      const imManager = getIMGatewayManager();
+      imManager.setTunnelConfig(config);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to set tunnel config',
+      };
+    }
+  });
+
+  ipcMain.handle('im:tunnel:status', async () => {
+    try {
+      const imManager = getIMGatewayManager();
+      const status = imManager.getTunnelStatus();
+      return { success: true, status };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get tunnel status',
+      };
+    }
+  });
+
+  ipcMain.handle('im:tunnel:start', async (_event, targetPort: number) => {
+    try {
+      const imManager = getIMGatewayManager();
+      const publicUrl = await imManager.startTunnel(targetPort);
+      return { success: true, publicUrl };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to start tunnel',
+      };
+    }
+  });
+
+  ipcMain.handle('im:tunnel:stop', async () => {
+    try {
+      const imManager = getIMGatewayManager();
+      await imManager.stopTunnel();
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to stop tunnel',
+      };
+    }
+  });
+
+  ipcMain.handle('im:tunnel:startForHina', async () => {
+    console.log('[Main] im:tunnel:startForHina called');
+    try {
+      const imManager = getIMGatewayManager();
+      console.log('[Main] Got IMGatewayManager');
+      const publicUrl = await imManager.startTunnelForHina();
+      console.log('[Main] Tunnel started successfully:', publicUrl);
+      return { success: true, publicUrl };
+    } catch (error) {
+      console.error('[Main] Failed to start tunnel for Hina:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to start tunnel for Hina',
+      };
+    }
+  });
+
+  ipcMain.handle('im:tunnel:publicWebhookUrl', async () => {
+    try {
+      const imManager = getIMGatewayManager();
+      const url = imManager.getPublicWebhookUrl();
+      return { success: true, url };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get public webhook URL',
+      };
+    }
+  });
+
   ipcMain.handle('generate-session-title', async (_event, userInput: string | null) => {
     return generateSessionTitle(userInput);
   });
@@ -2290,8 +2437,9 @@ if (!gotTheLock) {
     if (resetCount > 0) {
       console.log(`[Main] Reset ${resetCount} stuck cowork session(s) from running -> idle`);
     }
-    // Inject store getter into claudeSettings
-    setStoreGetter(() => store);
+    // Inject store getter into claudeSettings and coworkUtil
+    setClaudeSettingsStoreGetter(() => store);
+    setCoworkUtilStoreGetter(getStore);
     console.log('[Main] initApp: setStoreGetter done');
     const manager = getSkillManager();
     console.log('[Main] initApp: getSkillManager done');

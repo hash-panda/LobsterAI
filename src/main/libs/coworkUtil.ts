@@ -9,6 +9,36 @@ import type { OpenAICompatProxyTarget } from './coworkOpenAICompatProxy';
 import { getInternalApiBaseURL } from './coworkOpenAICompatProxy';
 import { coworkLog } from './coworkLogger';
 import { isSystemProxyEnabled, resolveSystemProxyUrl } from './systemProxy';
+import type { SqliteStore } from '../sqliteStore';
+
+// --- Store getter for Hina config (dependency injection) ---
+type StoreGetter = () => SqliteStore;
+let storeGetter: StoreGetter | null = null;
+
+/**
+ * Set the store getter for accessing Hina configuration.
+ * This should be called during app initialization (similar to skillManager pattern).
+ */
+export function setStoreGetter(getter: StoreGetter): void {
+  storeGetter = getter;
+}
+
+/**
+ * Get Hina configuration from the injected store.
+ * Returns null if store is not set or config doesn't exist.
+ */
+function getHinaConfig(): { appKey: string; appSecret: string; baseUrl: string } | null {
+  if (!storeGetter) {
+    return null;
+  }
+  try {
+    const store = storeGetter();
+    return store.getHinaConfig();
+  } catch (error) {
+    // Silently fail - Hina config is optional
+    return null;
+  }
+}
 
 function appendEnvPath(current: string | undefined, additions: string[]): string | undefined {
   const items = new Set<string>();
@@ -736,6 +766,14 @@ export async function getEnhancedEnv(target: OpenAICompatProxyTarget = 'local'):
   const internalApiBaseURL = getInternalApiBaseURL();
   if (internalApiBaseURL) {
     env.LOBSTERAI_API_BASE_URL = internalApiBaseURL;
+  }
+
+  // Inject Hina AI Interview configuration if available
+  const hinaConfig = getHinaConfig();
+  if (hinaConfig) {
+    env.HINA_APP_KEY = hinaConfig.appKey;
+    env.HINA_APP_SECRET = hinaConfig.appSecret;
+    env.HINA_BASE_URL = hinaConfig.baseUrl;
   }
 
   // Skip system proxy resolution if proxy env vars already exist

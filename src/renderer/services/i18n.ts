@@ -431,6 +431,23 @@ const translations: Record<LanguageType, Record<string, string>> = {
     emailHint163: '请使用授权码，而非账户密码。需先在网页端设置中开启 IMAP/SMTP 服务',
     emailHintQQ: '请使用授权码，而非账户密码。需先在网页端设置中开启 IMAP/SMTP 服务',
 
+    // 海纳 AI 面试配置
+    hinaTab: '海纳面试',
+    hinaConfig: '海纳 AI 面试配置',
+    hinaAppKey: 'App Key',
+    hinaAppSecret: 'App Secret',
+    hinaBaseUrl: 'API 地址',
+    hinaEnvTest: '测试环境',
+    hinaEnvProduction: '生产环境',
+    hinaEnvCustom: '自定义',
+    hinaWebhook: 'Webhook 设置',
+    hinaWebhookEnabled: '启用 Webhook',
+    hinaWebhookRunning: 'Webhook 服务运行中',
+    hinaWebhookStopped: 'Webhook 服务未启动',
+    hinaWebhookUrl: '回调地址',
+    hinaConfigSaved: '海纳配置已保存',
+    hinaConfigError: '保存配置失败',
+
     // 文件操作
     openFile: '打开文件',
     openFolder: '打开文件夹',
@@ -1064,6 +1081,23 @@ const translations: Record<LanguageType, Record<string, string>> = {
     emailHintGmail: 'If 2FA is enabled, use an App Password instead of your account password',
     emailHint163: 'Use an authorization code, not your account password. Enable IMAP/SMTP in web settings first',
     emailHintQQ: 'Use an authorization code, not your account password. Enable IMAP/SMTP in web settings first',
+
+    // Hina AI Interview Configuration
+    hinaTab: 'Hina Interview',
+    hinaConfig: 'Hina AI Interview Configuration',
+    hinaAppKey: 'App Key',
+    hinaAppSecret: 'App Secret',
+    hinaBaseUrl: 'API Base URL',
+    hinaEnvTest: 'Test Environment',
+    hinaEnvProduction: 'Production Environment',
+    hinaEnvCustom: 'Custom',
+    hinaWebhook: 'Webhook Settings',
+    hinaWebhookEnabled: 'Enable Webhook',
+    hinaWebhookRunning: 'Webhook service is running',
+    hinaWebhookStopped: 'Webhook service is not started',
+    hinaWebhookUrl: 'Callback URL',
+    hinaConfigSaved: 'Hina configuration saved',
+    hinaConfigError: 'Failed to save configuration',
 
     // File operations
     openFile: 'Open File',

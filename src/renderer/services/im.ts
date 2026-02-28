@@ -222,6 +222,181 @@ class IMService {
     const status = this.getStatus();
     return status.dingtalk.connected || status.feishu.connected || status.telegram.connected || status.discord.connected || status.nim.connected;
   }
+
+  /**
+   * Get Hina configuration
+   */
+  async getHinaConfig(): Promise<{ appKey: string; appSecret: string; baseUrl: string; webhookEnabled: boolean } | null> {
+    try {
+      const result = await window.electron.im.getHinaConfig();
+      if (result.success && result.config) {
+        return result.config;
+      }
+      return null;
+    } catch (error) {
+      console.error('[IM Service] Failed to get Hina config:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Set Hina configuration
+   */
+  async setHinaConfig(config: Partial<{ appKey: string; appSecret: string; baseUrl: string; webhookEnabled: boolean }>): Promise<boolean> {
+    try {
+      const result = await window.electron.im.setHinaConfig(config);
+      return result.success;
+    } catch (error) {
+      console.error('[IM Service] Failed to set Hina config:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get Hina webhook status
+   */
+  async getHinaWebhookStatus(): Promise<{
+    running: boolean;
+    port: number | null;
+    url: string | null;
+    lastEventTime: number | null;
+    totalEvents: number;
+  } | null> {
+    try {
+      const result = await window.electron.im.getHinaWebhookStatus();
+      if (result.success && result.status) {
+        return result.status;
+      }
+      return null;
+    } catch (error) {
+      console.error('[IM Service] Failed to get Hina webhook status:', error);
+      return null;
+    }
+  }
+
+  // ==================== Tunnel Methods ====================
+
+  /**
+   * Get tunnel configuration
+   */
+  async getTunnelConfig(): Promise<{
+    enabled: boolean;
+    provider: string;
+    ngrokAuthToken?: string;
+    ngrokPath?: string;
+    region?: string;
+  } | null> {
+    try {
+      const result = await window.electron.im.getTunnelConfig();
+      if (result.success && result.config) {
+        return result.config;
+      }
+      return null;
+    } catch (error) {
+      console.error('[IM Service] Failed to get tunnel config:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Set tunnel configuration
+   */
+  async setTunnelConfig(config: Partial<{
+    enabled: boolean;
+    provider: string;
+    ngrokAuthToken?: string;
+    ngrokPath?: string;
+    region?: string;
+  }>): Promise<boolean> {
+    try {
+      const result = await window.electron.im.setTunnelConfig(config);
+      return result.success;
+    } catch (error) {
+      console.error('[IM Service] Failed to set tunnel config:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get tunnel status
+   */
+  async getTunnelStatus(): Promise<{
+    running: boolean;
+    publicUrl: string | null;
+    localUrl: string | null;
+    provider: string;
+    error: string | null;
+    startedAt: number | null;
+  } | null> {
+    try {
+      const result = await window.electron.im.getTunnelStatus();
+      if (result.success && result.status) {
+        return result.status;
+      }
+      return null;
+    } catch (error) {
+      console.error('[IM Service] Failed to get tunnel status:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Start tunnel for a specific port
+   */
+  async startTunnel(targetPort: number): Promise<{ success: boolean; publicUrl?: string; error?: string }> {
+    try {
+      const result = await window.electron.im.startTunnel(targetPort);
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to start tunnel';
+      console.error('[IM Service] Failed to start tunnel:', message);
+      return { success: false, error: message };
+    }
+  }
+
+  /**
+   * Stop tunnel
+   */
+  async stopTunnel(): Promise<{ success: boolean; error?: string }> {
+    try {
+      const result = await window.electron.im.stopTunnel();
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to stop tunnel';
+      console.error('[IM Service] Failed to stop tunnel:', message);
+      return { success: false, error: message };
+    }
+  }
+
+  /**
+   * Start tunnel for Hina webhook
+   */
+  async startTunnelForHina(): Promise<{ success: boolean; publicUrl?: string; error?: string }> {
+    try {
+      const result = await window.electron.im.startTunnelForHina();
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to start tunnel for Hina';
+      console.error('[IM Service] Failed to start tunnel for Hina:', message);
+      return { success: false, error: message };
+    }
+  }
+
+  /**
+   * Get public webhook URL (tunnel URL + webhook path)
+   */
+  async getPublicWebhookUrl(): Promise<string | null> {
+    try {
+      const result = await window.electron.im.getPublicWebhookUrl();
+      if (result.success && result.url) {
+        return result.url;
+      }
+      return null;
+    } catch (error) {
+      console.error('[IM Service] Failed to get public webhook URL:', error);
+      return null;
+    }
+  }
 }
 
 export const imService = new IMService();

@@ -497,4 +497,26 @@ export class SqliteStore {
       console.warn('Failed to migrate electron-store data:', error);
     }
   }
+
+  /**
+   * Get Hina AI Interview configuration from im_config table
+   * Returns null if not configured
+   */
+  getHinaConfig(): { appKey: string; appSecret: string; baseUrl: string } | null {
+    try {
+      const result = this.db.exec('SELECT value FROM im_config WHERE key = ?', ['hina']);
+      if (!result[0]?.values[0]) {
+        return null;
+      }
+      const config = JSON.parse(result[0].values[0][0] as string);
+      return {
+        appKey: config.appKey || '',
+        appSecret: config.appSecret || '',
+        baseUrl: config.baseUrl || 'https://openapi.5kong.com',
+      };
+    } catch (error) {
+      console.warn('[SqliteStore] Failed to get Hina config:', error);
+      return null;
+    }
+  }
 }

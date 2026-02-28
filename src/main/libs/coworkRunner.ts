@@ -42,6 +42,10 @@ const SANDBOX_ALLOWED_ENV_KEYS = [
   'no_proxy',
   'TZ',
   'tz',
+  // Hina AI Interview configuration
+  'HINA_APP_KEY',
+  'HINA_APP_SECRET',
+  'HINA_BASE_URL',
 ] as const;
 
 const SANDBOX_SKILLS_MOUNT_TAG = 'skills';

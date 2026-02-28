@@ -263,6 +263,22 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.on('im:message:received', handler);
       return () => ipcRenderer.removeListener('im:message:received', handler);
     },
+
+    // Hina API
+    getHinaConfig: () => ipcRenderer.invoke('im:hina:config:get'),
+    setHinaConfig: (config: Partial<{ appKey: string; appSecret: string; baseUrl: string; webhookEnabled: boolean }>) =>
+      ipcRenderer.invoke('im:hina:config:set', config),
+    getHinaWebhookStatus: () => ipcRenderer.invoke('im:hina:webhook:status'),
+
+    // Tunnel API
+    getTunnelConfig: () => ipcRenderer.invoke('im:tunnel:config:get'),
+    setTunnelConfig: (config: Partial<{ enabled: boolean; provider: string; ngrokAuthToken?: string; ngrokPath?: string; region?: string }>) =>
+      ipcRenderer.invoke('im:tunnel:config:set', config),
+    getTunnelStatus: () => ipcRenderer.invoke('im:tunnel:status'),
+    startTunnel: (targetPort: number) => ipcRenderer.invoke('im:tunnel:start', targetPort),
+    stopTunnel: () => ipcRenderer.invoke('im:tunnel:stop'),
+    startTunnelForHina: () => ipcRenderer.invoke('im:tunnel:startForHina'),
+    getPublicWebhookUrl: () => ipcRenderer.invoke('im:tunnel:publicWebhookUrl'),
   },
   scheduledTasks: {
     // Task CRUD

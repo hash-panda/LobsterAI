@@ -14,6 +14,8 @@
     "create-plan": { "order": 80, "enabled": true },
     "canvas-design": { "order": 90, "enabled": true },
     "frontend-design": { "order": 100, "enabled": true },
+    "hina-interview": { "order": 110, "enabled": true },
+    "boss-recruitment": { "order": 111, "enabled": true },
     "local-tools": { "order": 200, "enabled": true },
     "weather": { "order": 210, "enabled": true },
     "imap-smtp-email": { "order": 211, "enabled": true },

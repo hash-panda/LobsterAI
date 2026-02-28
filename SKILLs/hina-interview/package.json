@@ -1,0 +1,12 @@
+{
+  "name": "hina-interview",
+  "version": "1.0.0",
+  "description": "海纳 AI 面试集成 Skill",
+  "scripts": {
+    "install-deps": "npm install"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {}
+}

@@ -416,3 +416,62 @@ export interface MediaMarker {
   name?: string;
   originalMarker: string;
 }
+
+// ==================== Tunnel Types ====================
+
+export type TunnelProvider = 'ngrok' | 'cloudflare' | 'localtunnel' | 'none';
+
+export interface TunnelConfig {
+  enabled: boolean;
+  provider: TunnelProvider;
+  ngrokAuthToken?: string;
+  ngrokPath?: string;
+  region?: string;
+}
+
+export interface TunnelStatus {
+  running: boolean;
+  publicUrl: string | null;
+  localUrl: string | null;
+  provider: TunnelProvider;
+  error: string | null;
+  startedAt: number | null;
+}
+
+export interface TunnelStartResult {
+  success: boolean;
+  publicUrl?: string;
+  error?: string;
+}
+
+export interface TunnelStopResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface TunnelStatusResult {
+  success: boolean;
+  status?: TunnelStatus;
+  error?: string;
+}
+
+export interface TunnelConfigResult {
+  success: boolean;
+  config?: TunnelConfig;
+  error?: string;
+}
+
+export const DEFAULT_TUNNEL_CONFIG: TunnelConfig = {
+  enabled: false,
+  provider: 'ngrok',
+  region: 'us',
+};
+
+export const DEFAULT_TUNNEL_STATUS: TunnelStatus = {
+  running: false,
+  publicUrl: null,
+  localUrl: null,
+  provider: 'none',
+  error: null,
+  startedAt: null,
+};

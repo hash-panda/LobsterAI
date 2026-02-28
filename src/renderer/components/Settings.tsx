@@ -23,6 +23,7 @@ import type {
 } from '../types/cowork';
 import IMSettings from './im/IMSettings';
 import EmailSkillConfig from './skills/EmailSkillConfig';
+import HinaSkillConfig from './skills/HinaSkillConfig';
 import { defaultConfig, type AppConfig, getVisibleProviders } from '../config';
 import {
   OpenAIIcon,
@@ -40,7 +41,7 @@ import {
   CustomProviderIcon,
 } from './icons/providers';
 
-type TabType = 'general' | 'model' | 'coworkSandbox' | 'coworkMemory' | 'shortcuts' | 'im' | 'email';
+type TabType = 'general' | 'model' | 'coworkSandbox' | 'coworkMemory' | 'shortcuts' | 'im' | 'email' | 'hina';
 
 export type SettingsOpenOptions = {
   initialTab?: TabType;
@@ -1558,6 +1559,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
     { key: 'model',          label: i18nService.t('model'),          icon: <CubeIcon className="h-5 w-5" /> },
     { key: 'im',             label: i18nService.t('imBot'),          icon: <ChatBubbleLeftIcon className="h-5 w-5" /> },
     { key: 'email',          label: i18nService.t('emailTab'),       icon: <EnvelopeIcon className="h-5 w-5" /> },
+    { key: 'hina',           label: i18nService.t('hinaTab'),        icon: <EnvelopeIcon className="h-5 w-5" /> },
     { key: 'coworkMemory',   label: i18nService.t('coworkMemoryTitle'), icon: <BrainIcon className="h-5 w-5" /> },
     { key: 'coworkSandbox',  label: i18nService.t('coworkSandbox'),  icon: <ShieldCheckIcon className="h-5 w-5" /> },
     { key: 'shortcuts',      label: i18nService.t('shortcuts'),      icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5"><rect x="2" y="4" width="20" height="14" rx="2" /><line x1="6" y1="8" x2="8" y2="8" /><line x1="10" y1="8" x2="12" y2="8" /><line x1="14" y1="8" x2="16" y2="8" /><line x1="6" y1="12" x2="8" y2="12" /><line x1="10" y1="12" x2="14" y2="12" /><line x1="16" y1="12" x2="18" y2="12" /><line x1="8" y1="15.5" x2="16" y2="15.5" /></svg> },
@@ -1801,6 +1803,9 @@ const Settings: React.FC<SettingsProps> = ({ onClose, initialTab, notice }) => {
 
       case 'email':
         return <EmailSkillConfig />;
+
+      case 'hina':
+        return <HinaSkillConfig />;
 
       case 'coworkSandbox':
         return (

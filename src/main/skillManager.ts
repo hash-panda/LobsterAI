@@ -44,7 +44,7 @@ function hasCommand(command: string, env: NodeJS.ProcessEnv): boolean {
  * Build an environment for spawning skill scripts.
  * Merges the user's shell PATH with the current process environment.
  */
-function buildSkillEnv(): Record<string, string | undefined> {
+function buildSkillEnv(extraEnv?: Record<string, string | undefined>): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { ...process.env };
 
   if (app.isPackaged) {
@@ -75,6 +75,11 @@ function buildSkillEnv(): Record<string, string | undefined> {
   // Expose Electron executable so skill scripts can run JS with ELECTRON_RUN_AS_NODE
   // even when system Node.js is not installed.
   env.LOBSTERAI_ELECTRON_PATH = process.execPath;
+
+  // Merge extra environment variables (e.g., skill-specific config)
+  if (extraEnv) {
+    Object.assign(env, extraEnv);
+  }
 
   return env;
 }
@@ -1502,8 +1507,29 @@ export class SkillManager {
   ): Promise<SkillScriptRunResult> {
     let lastResult: SkillScriptRunResult | null = null;
 
-    // Build base environment with user's shell PATH
-    const baseEnv = buildSkillEnv();
+    // Inject Hina AI Interview configuration from database
+    const extraEnv: Record<string, string | undefined> = {};
+    try {
+      const store = this.getStore();
+      const hinaConfig = store.getHinaConfig();
+      if (hinaConfig) {
+        if (hinaConfig.appKey) {
+          extraEnv.HINA_APP_KEY = hinaConfig.appKey;
+        }
+        if (hinaConfig.appSecret) {
+          extraEnv.HINA_APP_SECRET = hinaConfig.appSecret;
+        }
+        if (hinaConfig.baseUrl) {
+          extraEnv.HINA_BASE_URL = hinaConfig.baseUrl;
+        }
+        console.log('[skills] Injected Hina AI Interview configuration from database');
+      }
+    } catch (error) {
+      console.warn('[skills] Failed to load Hina config:', error);
+    }
+
+    // Build base environment with user's shell PATH and Hina config
+    const baseEnv = buildSkillEnv(extraEnv);
 
     for (const runtime of this.getScriptRuntimeCandidates()) {
       const env: NodeJS.ProcessEnv = {

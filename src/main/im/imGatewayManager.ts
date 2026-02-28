@@ -14,6 +14,8 @@ import { IMCoworkHandler } from './imCoworkHandler';
 import { IMStore } from './imStore';
 import { getOapiAccessToken } from './dingtalkMedia';
 import { fetchJsonWithTimeout } from './http';
+import { HinaWebhookHandler, HinaWebhookEvent } from './hinaWebhookHandler';
+import { TunnelService, getTunnelService } from './tunnelService';
 import {
   IMGatewayConfig,
   IMGatewayStatus,
@@ -22,6 +24,8 @@ import {
   IMConnectivityCheck,
   IMConnectivityTestResult,
   IMConnectivityVerdict,
+  TunnelConfig,
+  TunnelStatus,
 } from './types';
 import type { Database } from 'sql.js';
 import type { CoworkRunner } from '../libs/coworkRunner';
@@ -53,6 +57,8 @@ export class IMGatewayManager extends EventEmitter {
   private telegramGateway: TelegramGateway;
   private discordGateway: DiscordGateway;
   private nimGateway: NimGateway;
+  private hinaWebhook: HinaWebhookHandler;
+  private tunnelService: TunnelService;
   private imStore: IMStore;
   private chatHandler: IMChatHandler | null = null;
   private coworkHandler: IMCoworkHandler | null = null;
@@ -72,6 +78,9 @@ export class IMGatewayManager extends EventEmitter {
     this.telegramGateway = new TelegramGateway();
     this.discordGateway = new DiscordGateway();
     this.nimGateway = new NimGateway();
+    this.hinaWebhook = new HinaWebhookHandler();
+    this.hinaWebhook.setLogger((...args) => console.log('[HinaWebhook]', ...args));
+    this.tunnelService = getTunnelService();
 
     // Store Cowork dependencies if provided
     if (options?.coworkRunner && options?.coworkStore) {
@@ -166,6 +175,45 @@ export class IMGatewayManager extends EventEmitter {
     });
     this.nimGateway.on('message', (message: IMMessage) => {
       this.emit('message', message);
+    });
+
+    // Hina Webhook events
+    this.hinaWebhook.on('started', (url: string) => {
+      console.log(`[IMGatewayManager] Hina webhook started: ${url}`);
+      this.emit('hinaWebhookStarted', url);
+    });
+    this.hinaWebhook.on('stopped', () => {
+      console.log('[IMGatewayManager] Hina webhook stopped');
+      this.emit('hinaWebhookStopped');
+    });
+    this.hinaWebhook.on('event', (event: HinaWebhookEvent) => {
+      console.log('[IMGatewayManager] Hina webhook event received:');
+      console.log('  - eventType:', event.eventType);
+      console.log('  - interviewId:', event.interviewId);
+      console.log('  - candidateId:', event.candidateId);
+      console.log('  - candidateName:', event.candidateName);
+      console.log('  - timestamp:', new Date(event.timestamp).toISOString());
+      console.log('  - data:', JSON.stringify(event.data, null, 2));
+      this.emit('hinaEvent', event);
+
+      // 尝试发送通知到飞书
+      this.sendHinaNotificationToFeishu(event).catch((err) => {
+        console.error('[IMGatewayManager] Failed to send Hina notification to Feishu:', err);
+      });
+    });
+
+    // Tunnel events
+    this.tunnelService.on('started', (publicUrl: string) => {
+      console.log(`[IMGatewayManager] Tunnel started: ${publicUrl}`);
+      this.emit('tunnelStarted', publicUrl);
+    });
+    this.tunnelService.on('stopped', () => {
+      console.log('[IMGatewayManager] Tunnel stopped');
+      this.emit('tunnelStopped');
+    });
+    this.tunnelService.on('error', (error: string) => {
+      console.error('[IMGatewayManager] Tunnel error:', error);
+      this.emit('tunnelError', error);
     });
   }
 
@@ -628,6 +676,16 @@ export class IMGatewayManager extends EventEmitter {
         console.error(`[IMGatewayManager] Failed to start NIM: ${error.message}`);
       }
     }
+
+    // Start Hina Webhook if enabled
+    const hinaConfig = this.imStore.getHinaConfig?.();
+    if (hinaConfig?.webhookEnabled) {
+      try {
+        await this.hinaWebhook.start();
+      } catch (error: any) {
+        console.error(`[IMGatewayManager] Failed to start Hina Webhook: ${error.message}`);
+      }
+    }
   }
 
   /**
@@ -640,6 +698,8 @@ export class IMGatewayManager extends EventEmitter {
       this.telegramGateway.stop(),
       this.discordGateway.stop(),
       this.nimGateway.stop(),
+      this.hinaWebhook.stop(),
+      this.tunnelService.stop(),
     ]);
   }
 
@@ -860,5 +920,136 @@ export class IMGatewayManager extends EventEmitter {
       return 'warn';
     }
     return 'pass';
+  }
+
+  // ==================== Hina Webhook ====================
+
+  /**
+   * Get Hina Webhook status
+   */
+  getHinaWebhookStatus() {
+    return this.hinaWebhook.getStatus();
+  }
+
+  /**
+   * Start Hina Webhook
+   */
+  async startHinaWebhook(): Promise<void> {
+    await this.hinaWebhook.start();
+  }
+
+  /**
+   * Stop Hina Webhook
+   */
+  async stopHinaWebhook(): Promise<void> {
+    await this.hinaWebhook.stop();
+  }
+
+  /**
+   * Get Hina Webhook URL
+   */
+  getHinaWebhookUrl(): string | null {
+    return this.hinaWebhook.getWebhookUrl();
+  }
+
+  /**
+   * Send Hina event notification to Feishu
+   * This is called when a Hina webhook event is received
+   */
+  async sendHinaNotificationToFeishu(event: HinaWebhookEvent): Promise<void> {
+    const config = this.getConfig();
+    if (!config.feishu.enabled) {
+      console.log('[IMGatewayManager] Feishu not enabled, skipping Hina notification');
+      return;
+    }
+
+    // Build notification message based on event type
+    let message = '';
+    switch (event.eventType) {
+      case 'check_in':
+        message = `📢 **候选人签到通知**\n\n候选人 **${event.candidateName || event.candidateId}** 已签到，正在开始 AI 面试`;
+        break;
+      case 'interview_start':
+        message = `🎤 **面试开始**\n\n候选人 **${event.candidateName || event.candidateId}** 的面试已开始`;
+        break;
+      case 'interview_end':
+        message = `✅ **面试完成**\n\n候选人 **${event.candidateName || event.candidateId}** 的面试已完成，正在生成评估报告...`;
+        break;
+      case 'evaluation_result':
+        message = `📋 **评估报告已生成**\n\n候选人 **${event.candidateName || event.candidateId}** 的面试评估报告已生成\n\n面试间 ID: ${event.interviewId}\n候选人 ID: ${event.candidateId}`;
+        break;
+    }
+
+    if (message && this.feishuGateway.isConnected()) {
+      // Send to a configured notification chat or the last active chat
+      // For now, we'll emit an event that can be handled by the UI
+      this.emit('hinaNotification', { event, message });
+    }
+  }
+
+  // ==================== Tunnel Service ====================
+
+  /**
+   * Get tunnel configuration
+   */
+  getTunnelConfig(): TunnelConfig {
+    return this.imStore.getTunnelConfig();
+  }
+
+  /**
+   * Set tunnel configuration
+   */
+  setTunnelConfig(config: Partial<TunnelConfig>): void {
+    this.imStore.setTunnelConfig(config);
+    this.tunnelService.updateConfig(config);
+  }
+
+  /**
+   * Get tunnel status
+   */
+  getTunnelStatus(): TunnelStatus {
+    return this.tunnelService.getStatus();
+  }
+
+  /**
+   * Start tunnel for a specific port
+   */
+  async startTunnel(targetPort: number): Promise<string> {
+    const config = this.getTunnelConfig();
+    this.tunnelService.updateConfig(config);
+    return await this.tunnelService.start(targetPort);
+  }
+
+  /**
+   * Stop tunnel
+   */
+  async stopTunnel(): Promise<void> {
+    await this.tunnelService.stop();
+  }
+
+  /**
+   * Start tunnel for Hina Webhook
+   * This is a convenience method that starts the tunnel for the Hina webhook port
+   */
+  async startTunnelForHina(): Promise<string> {
+    const hinaStatus = this.hinaWebhook.getStatus();
+    if (!hinaStatus.running || !hinaStatus.port) {
+      throw new Error('Hina Webhook is not running. Please start it first.');
+    }
+    return await this.startTunnel(hinaStatus.port);
+  }
+
+  /**
+   * Get the full public webhook URL (tunnel URL + webhook path)
+   */
+  getPublicWebhookUrl(): string | null {
+    const tunnelStatus = this.tunnelService.getStatus();
+    const hinaConfig = this.hinaWebhook.getConfig();
+
+    if (!tunnelStatus.running || !tunnelStatus.publicUrl) {
+      return null;
+    }
+
+    return `${tunnelStatus.publicUrl}${hinaConfig.path}`;
   }
 }

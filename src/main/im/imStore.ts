@@ -14,12 +14,14 @@ import {
   IMSettings,
   IMPlatform,
   IMSessionMapping,
+  TunnelConfig,
   DEFAULT_DINGTALK_CONFIG,
   DEFAULT_FEISHU_CONFIG,
   DEFAULT_TELEGRAM_CONFIG,
   DEFAULT_DISCORD_CONFIG,
   DEFAULT_NIM_CONFIG,
   DEFAULT_IM_SETTINGS,
+  DEFAULT_TUNNEL_CONFIG,
 } from './types';
 
 export class IMStore {
@@ -381,5 +383,59 @@ export class IMStore {
       createdAt: row[3] as number,
       lastActiveAt: row[4] as number,
     }));
+  }
+
+  // ==================== Hina Configuration ====================
+
+  /**
+   * Get Hina configuration
+   */
+  getHinaConfig(): { appKey: string; appSecret: string; baseUrl: string; webhookEnabled: boolean } {
+    const result = this.db.exec('SELECT value FROM im_config WHERE key = ?', ['hina']);
+    if (!result[0]?.values[0]) {
+      return { appKey: '', appSecret: '', baseUrl: 'https://openapi.5kong.com', webhookEnabled: false };
+    }
+    try {
+      const config = JSON.parse(result[0].values[0][0] as string);
+      // Set default baseUrl if not present
+      if (!config.baseUrl) {
+        config.baseUrl = 'https://openapi.5kong.com';
+      }
+      return config;
+    } catch {
+      return { appKey: '', appSecret: '', baseUrl: 'https://openapi.5kong.com', webhookEnabled: false };
+    }
+  }
+
+  /**
+   * Set Hina configuration
+   */
+  setHinaConfig(config: Partial<{ appKey: string; appSecret: string; baseUrl: string; webhookEnabled: boolean }>): void {
+    const current = this.getHinaConfig();
+    const updated = { ...current, ...config };
+    const now = Date.now();
+    this.db.run(
+      'INSERT OR REPLACE INTO im_config (key, value, updated_at) VALUES (?, ?, ?)',
+      ['hina', JSON.stringify(updated), now]
+    );
+    this.saveDb();
+  }
+
+  // ==================== Tunnel Configuration ====================
+
+  /**
+   * Get tunnel configuration
+   */
+  getTunnelConfig(): TunnelConfig {
+    const stored = this.getConfigValue<TunnelConfig>('tunnel');
+    return { ...DEFAULT_TUNNEL_CONFIG, ...stored };
+  }
+
+  /**
+   * Set tunnel configuration
+   */
+  setTunnelConfig(config: Partial<TunnelConfig>): void {
+    const current = this.getTunnelConfig();
+    this.setConfigValue('tunnel', { ...current, ...config });
   }
 }
