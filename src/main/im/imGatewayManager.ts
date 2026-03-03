@@ -17,6 +17,14 @@ import { fetchJsonWithTimeout } from './http';
 import { HinaWebhookHandler, HinaWebhookEvent } from './hinaWebhookHandler';
 import { TunnelService, getTunnelService } from './tunnelService';
 import {
+  getHinaCandidateStore,
+  HinaCandidateStore,
+  CandidateStatus,
+  CandidateEventType,
+} from '../hinaCandidateStore';
+import { HinaNotificationConfig, DEFAULT_HINA_NOTIFICATION_CONFIG } from './types';
+import { BrowserWindow } from 'electron';
+import {
   IMGatewayConfig,
   IMGatewayStatus,
   IMPlatform,
@@ -194,6 +202,12 @@ export class IMGatewayManager extends EventEmitter {
       console.log('  - candidateName:', event.candidateName);
       console.log('  - timestamp:', new Date(event.timestamp).toISOString());
       console.log('  - data:', JSON.stringify(event.data, null, 2));
+
+      // 处理候选人状态更新
+      this.handleHinaCandidateEvent(event).catch((err) => {
+        console.error('[IMGatewayManager] Failed to handle Hina candidate event:', err);
+      });
+
       this.emit('hinaEvent', event);
 
       // 尝试发送通知到飞书
@@ -953,38 +967,395 @@ export class IMGatewayManager extends EventEmitter {
   }
 
   /**
-   * Send Hina event notification to Feishu
+   * Get Hina notification configuration
+   */
+  getHinaNotificationConfig(): HinaNotificationConfig {
+    return this.imStore.getHinaNotificationConfig();
+  }
+
+  /**
+   * Set Hina notification configuration
+   */
+  setHinaNotificationConfig(config: Partial<HinaNotificationConfig>): void {
+    this.imStore.setHinaNotificationConfig(config);
+  }
+
+  /**
+   * Send Hina event notification to Feishu and App
    * This is called when a Hina webhook event is received
    */
   async sendHinaNotificationToFeishu(event: HinaWebhookEvent): Promise<void> {
-    const config = this.getConfig();
-    if (!config.feishu.enabled) {
-      console.log('[IMGatewayManager] Feishu not enabled, skipping Hina notification');
+    const notifConfig = this.getHinaNotificationConfig();
+
+    // Check if notification is enabled for this event type
+    if (!notifConfig.enabled) {
+      console.log('[IMGatewayManager] Hina notification disabled');
       return;
     }
 
-    // Build notification message based on event type
-    let message = '';
-    switch (event.eventType) {
-      case 'check_in':
-        message = `📢 **候选人签到通知**\n\n候选人 **${event.candidateName || event.candidateId}** 已签到，正在开始 AI 面试`;
-        break;
-      case 'interview_start':
-        message = `🎤 **面试开始**\n\n候选人 **${event.candidateName || event.candidateId}** 的面试已开始`;
-        break;
-      case 'interview_end':
-        message = `✅ **面试完成**\n\n候选人 **${event.candidateName || event.candidateId}** 的面试已完成，正在生成评估报告...`;
-        break;
-      case 'evaluation_result':
-        message = `📋 **评估报告已生成**\n\n候选人 **${event.candidateName || event.candidateId}** 的面试评估报告已生成\n\n面试间 ID: ${event.interviewId}\n候选人 ID: ${event.candidateId}`;
-        break;
+    // Check event-specific notification settings
+    const eventNotifMap: Record<string, keyof HinaNotificationConfig> = {
+      check_in: 'notifyOnCheckIn',
+      interview_start: 'notifyOnStart',
+      interview_end: 'notifyOnEnd',
+      evaluation_result: 'notifyOnReport',
+    };
+
+    const notifKey = eventNotifMap[event.eventType];
+    if (notifKey && !notifConfig[notifKey]) {
+      console.log(`[IMGatewayManager] Notification disabled for event type: ${event.eventType}`);
+      return;
     }
 
-    if (message && this.feishuGateway.isConnected()) {
-      // Send to a configured notification chat or the last active chat
-      // For now, we'll emit an event that can be handled by the UI
-      this.emit('hinaNotification', { event, message });
+    // Build notification content
+    const { title, message, color } = this.buildHinaNotificationContent(event);
+
+    // Send to Feishu
+    if (notifConfig.feishuEnabled) {
+      await this.sendHinaNotificationToFeishuImpl(event, title, message, color, notifConfig.feishuChatId);
     }
+
+    // Send to App (IPC to renderer)
+    if (notifConfig.appEnabled) {
+      this.sendHinaNotificationToApp(event, title, message);
+    }
+
+    // Emit event for other listeners
+    this.emit('hinaNotification', { event, title, message });
+  }
+
+  /**
+   * Build notification content based on event type
+   */
+  private buildHinaNotificationContent(event: HinaWebhookEvent): {
+    title: string;
+    message: string;
+    color: string;
+  } {
+    const candidateName = event.candidateName || event.candidateId;
+    const eventData = event.data as Record<string, unknown> | undefined;
+    const resultOverView = eventData?.resultOverView as Record<string, unknown> | undefined;
+
+    switch (event.eventType) {
+      case 'check_in':
+        return {
+          title: '候选人签到通知',
+          message: `候选人 **${candidateName}** 已签到，即将开始 AI 面试`,
+          color: 'blue',
+        };
+      case 'interview_start':
+        return {
+          title: '面试开始',
+          message: `候选人 **${candidateName}** 的面试已开始`,
+          color: 'turquoise',
+        };
+      case 'interview_end':
+        return {
+          title: '面试完成',
+          message: `候选人 **${candidateName}** 的面试已完成，正在生成评估报告...`,
+          color: 'green',
+        };
+      case 'evaluation_result':
+        const score = resultOverView?.scoreAi;
+        const scoreText = score !== undefined ? `\n**评分**: ${score}分` : '';
+        const auditDesc = resultOverView?.auditDescAi as string | undefined;
+        const auditText = auditDesc ? `\n\n**评价**: ${auditDesc.substring(0, 100)}${auditDesc.length > 100 ? '...' : ''}` : '';
+        return {
+          title: '评估报告已生成',
+          message: `候选人 **${candidateName}** 的面试评估报告已生成${scoreText}${auditText}`,
+          color: 'purple',
+        };
+      default:
+        return {
+          title: '面试状态更新',
+          message: `候选人 **${candidateName}** 状态更新: ${event.eventType}`,
+          color: 'grey',
+        };
+    }
+  }
+
+  /**
+   * Send notification to Feishu (implementation)
+   */
+  private async sendHinaNotificationToFeishuImpl(
+    event: HinaWebhookEvent,
+    title: string,
+    message: string,
+    color: string,
+    chatId?: string
+  ): Promise<void> {
+    const config = this.getConfig();
+    if (!config.feishu.enabled) {
+      console.log('[IMGatewayManager] Feishu not enabled, skipping notification');
+      return;
+    }
+
+    if (!this.feishuGateway.isConnected()) {
+      console.log('[IMGatewayManager] Feishu not connected, skipping notification');
+      return;
+    }
+
+    try {
+      // Use specified chatId or last active chat
+      const targetChatId = chatId || this.feishuGateway.getLastChatId();
+      if (!targetChatId) {
+        console.log('[IMGatewayManager] No target chat for Feishu notification');
+        return;
+      }
+
+      // Build Feishu card message
+      const card = this.buildFeishuNotificationCard(event, title, message, color);
+      const content = JSON.stringify(card);
+
+      // Send via Feishu gateway
+      await this.feishuGateway.sendCardMessageToChat(targetChatId, content);
+      console.log('[IMGatewayManager] Sent Hina notification to Feishu:', title);
+    } catch (error) {
+      console.error('[IMGatewayManager] Failed to send Hina notification to Feishu:', error);
+    }
+  }
+
+  /**
+   * Build Feishu interactive card for notification
+   */
+  private buildFeishuNotificationCard(
+    event: HinaWebhookEvent,
+    title: string,
+    message: string,
+    color: string
+  ): Record<string, unknown> {
+    const candidateName = event.candidateName || event.candidateId;
+    const eventData = event.data as Record<string, unknown> | undefined;
+    const candidateInfo = eventData?.candidateInfo as Record<string, unknown> | undefined;
+    const resultOverView = eventData?.resultOverView as Record<string, unknown> | undefined;
+
+    // Build fields
+    const fields: Array<{ is_short: boolean; text: { tag: string; content: string } }> = [
+      {
+        is_short: true,
+        text: { tag: 'lark_md', content: `**候选人**\n${candidateName}` },
+      },
+    ];
+
+    // Add phone if available
+    if (candidateInfo?.phone) {
+      fields.push({
+        is_short: true,
+        text: { tag: 'lark_md', content: `**手机号**\n${candidateInfo.phone}` },
+      });
+    }
+
+    // Add score for evaluation result
+    if (event.eventType === 'evaluation_result' && resultOverView?.scoreAi !== undefined) {
+      fields.push({
+        is_short: true,
+        text: { tag: 'lark_md', content: `**评分**\n${resultOverView.scoreAi}分` },
+      });
+    }
+
+    // Add time
+    fields.push({
+      is_short: true,
+      text: { tag: 'lark_md', content: `**时间**\n${new Date(event.timestamp).toLocaleString('zh-CN')}` },
+    });
+
+    // Build card
+    const card: Record<string, unknown> = {
+      config: { wide_screen_mode: true },
+      header: {
+        title: { tag: 'plain_text', content: title },
+        template: color,
+      },
+      elements: [
+        { tag: 'div', text: { tag: 'lark_md', content: message } },
+        { tag: 'hr' },
+        { tag: 'div', fields },
+      ],
+    };
+
+    // Add report link for evaluation result
+    if (event.eventType === 'evaluation_result' && resultOverView?.reportUrl) {
+      (card.elements as Record<string, unknown>[]).push({
+        tag: 'action',
+        actions: [
+          {
+            tag: 'button',
+            text: { tag: 'plain_text', content: '查看完整报告' },
+            url: resultOverView.reportUrl,
+            type: 'primary',
+          },
+        ],
+      });
+    }
+
+    return card;
+  }
+
+  /**
+   * Send notification to app (IPC to renderer)
+   */
+  private sendHinaNotificationToApp(
+    event: HinaWebhookEvent,
+    title: string,
+    message: string
+  ): void {
+    try {
+      const windows = BrowserWindow.getAllWindows();
+      if (windows.length === 0) {
+        console.log('[IMGatewayManager] No windows to send app notification');
+        return;
+      }
+
+      const notification = {
+        type: 'hina_candidate',
+        title,
+        message,
+        event: {
+          eventType: event.eventType,
+          candidateId: event.candidateId,
+          candidateName: event.candidateName,
+          timestamp: event.timestamp,
+        },
+      };
+
+      // Send to all windows
+      for (const win of windows) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('hina:notification', notification);
+        }
+      }
+
+      console.log('[IMGatewayManager] Sent Hina notification to app:', title);
+    } catch (error) {
+      console.error('[IMGatewayManager] Failed to send app notification:', error);
+    }
+  }
+
+  /**
+   * Handle Hina candidate event - update status in database
+   */
+  private async handleHinaCandidateEvent(event: HinaWebhookEvent): Promise<void> {
+    const candidateStore = getHinaCandidateStore();
+    if (!candidateStore) {
+      console.warn('[IMGatewayManager] HinaCandidateStore not initialized, skipping candidate status update');
+      return;
+    }
+
+    const { candidateId, candidateName, eventType, interviewId, data } = event;
+
+    // 检查候选人是否存在，不存在则创建
+    let candidate = candidateStore.getCandidateById(candidateId);
+
+    // 事件类型到状态的映射
+    const statusMap: Record<string, CandidateStatus> = {
+      check_in: 'check_in',
+      interview_start: 'interviewing',
+      interview_end: 'interviewing', // 面试结束但报告未生成，保持 interviewing 状态
+      evaluation_result: 'completed',
+    };
+
+    // 事件类型到存储事件类型的映射
+    const eventTypeMap: Record<string, CandidateEventType> = {
+      check_in: 'check_in',
+      interview_start: 'interview_start',
+      interview_end: 'interview_end',
+      evaluation_result: 'report_generated',
+    };
+
+    const newStatus = statusMap[eventType];
+    const storeEventType = eventTypeMap[eventType];
+
+    if (!candidate) {
+      // 候选人不存在，从事件数据中提取信息并创建
+      const payload = data as Record<string, unknown> | undefined;
+      const callbackData = payload?.callbackData as Record<string, unknown> | undefined;
+      const candidateInfo = callbackData?.candidateInfo as Record<string, unknown> | undefined;
+      const interviewInfo = callbackData?.interviewInfo as Record<string, unknown> | undefined;
+
+      // 创建新候选人（需要手机号，如果没有则使用占位符）
+      const phone = (candidateInfo?.phone as string) || `unknown_${candidateId}`;
+      const name = candidateName || (candidateInfo?.name as string) || '未知候选人';
+      const interviewCode = (interviewInfo?.connectCode as string) || interviewId || undefined;
+
+      candidate = candidateStore.upsertCandidate({
+        outId: candidateId,
+        phone,
+        name,
+        email: candidateInfo?.email as string | undefined,
+        interviewCode,
+      });
+
+      console.log('[IMGatewayManager] Created new candidate from webhook event:', candidateId, { phone, name, interviewCode });
+    }
+
+    // 更新状态
+    if (newStatus) {
+      candidateStore.updateCandidateStatus(candidateId, newStatus, event.timestamp);
+    }
+
+    // 记录事件
+    candidateStore.addEvent(candidateId, storeEventType, data);
+
+    // 如果是评估结果事件，保存报告数据
+    if (eventType === 'evaluation_result' && data) {
+      const payload = data as Record<string, unknown>;
+      const callbackData = payload.callbackData as Record<string, unknown> | undefined;
+
+      if (!callbackData) {
+        console.log('[IMGatewayManager] No callbackData in event');
+        return;
+      }
+
+      const resultOverView = callbackData.resultOverView as Record<string, unknown> | undefined;
+      const candidateInfo = callbackData.candidateInfo as Record<string, unknown> | undefined;
+      const interviewInfo = callbackData.interviewInfo as Record<string, unknown> | undefined;
+      const interviewSubmit = callbackData.interviewSubmit as Record<string, unknown> | undefined;
+      const questionAnswer = callbackData.questionAnswer as Record<string, unknown> | undefined;
+
+      // 解析面试时长字符串（如 "14分19秒"）为秒数
+      const parseDuration = (durationStr: string | undefined): number | undefined => {
+        if (!durationStr) return undefined;
+        const match = durationStr.match(/(?:(\d+)分)?(?:(\d+)秒)?/);
+        if (!match) return undefined;
+        const minutes = parseInt(match[1] || '0', 10);
+        const seconds = parseInt(match[2] || '0', 10);
+        return minutes * 60 + seconds;
+      };
+
+      // 解析时间字符串（如 "2026-02-28 12:17:40"）为时间戳
+      const parseTimeString = (timeStr: string | undefined): number | undefined => {
+        if (!timeStr) return undefined;
+        const ts = Date.parse(timeStr.replace(' ', 'T'));
+        return isNaN(ts) ? undefined : ts;
+      };
+
+      // 提取新增字段（修正路径）
+      const reportData = {
+        reportUrl: resultOverView?.reportUrl as string | undefined,
+        scoreAi: resultOverView?.scoreAi as number | undefined,
+        auditDescAi: resultOverView?.auditDescAi as string | undefined,
+        fullData: callbackData,  // 保存完整的回调数据
+        // 新增字段（修正路径）
+        interviewName: interviewInfo?.name as string | undefined,
+        photoUrl: candidateInfo?.photoUrl as string | undefined,
+        durationSeconds: parseDuration(interviewSubmit?.duration as string | undefined),
+        questionCount: questionAnswer?.questionNumber as number | undefined,
+        answerCount: questionAnswer?.answerNumber as number | undefined,
+        beginTime: parseTimeString(resultOverView?.beginTime as string | undefined),
+        loginTime: parseTimeString(resultOverView?.loginTime as string | undefined),
+        submitTime: parseTimeString(interviewSubmit?.time as string | undefined),
+      };
+
+      candidateStore.saveReport(candidateId, reportData);
+
+      console.log('[IMGatewayManager] Saved report for candidate:', candidateId, {
+        score: reportData.scoreAi,
+        duration: reportData.durationSeconds,
+        questionCount: reportData.questionCount,
+      });
+    }
+
+    console.log('[IMGatewayManager] Updated candidate status:', candidateId, '->', newStatus);
   }
 
   // ==================== Tunnel Service ====================

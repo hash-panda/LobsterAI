@@ -15,6 +15,7 @@ import {
   IMPlatform,
   IMSessionMapping,
   TunnelConfig,
+  HinaNotificationConfig,
   DEFAULT_DINGTALK_CONFIG,
   DEFAULT_FEISHU_CONFIG,
   DEFAULT_TELEGRAM_CONFIG,
@@ -22,6 +23,7 @@ import {
   DEFAULT_NIM_CONFIG,
   DEFAULT_IM_SETTINGS,
   DEFAULT_TUNNEL_CONFIG,
+  DEFAULT_HINA_NOTIFICATION_CONFIG,
 } from './types';
 
 export class IMStore {
@@ -437,5 +439,23 @@ export class IMStore {
   setTunnelConfig(config: Partial<TunnelConfig>): void {
     const current = this.getTunnelConfig();
     this.setConfigValue('tunnel', { ...current, ...config });
+  }
+
+  // ==================== Hina Notification Configuration ====================
+
+  /**
+   * Get Hina notification configuration
+   */
+  getHinaNotificationConfig(): HinaNotificationConfig {
+    const stored = this.getConfigValue<HinaNotificationConfig>('hina_notification');
+    return { ...DEFAULT_HINA_NOTIFICATION_CONFIG, ...stored };
+  }
+
+  /**
+   * Set Hina notification configuration
+   */
+  setHinaNotificationConfig(config: Partial<HinaNotificationConfig>): void {
+    const current = this.getHinaNotificationConfig();
+    this.setConfigValue('hina_notification', { ...current, ...config });
   }
 }

@@ -884,4 +884,33 @@ export class FeishuGateway extends EventEmitter {
     await this.sendMessage(this.lastChatId, text);
     this.status.lastOutboundAt = Date.now();
   }
+
+  /**
+   * Get the last active chat ID
+   */
+  getLastChatId(): string | null {
+    return this.lastChatId;
+  }
+
+  /**
+   * Send a card message to a specific chat
+   */
+  async sendCardMessageToChat(chatId: string, cardContent: string): Promise<void> {
+    if (!this.restClient) {
+      throw new Error('Feishu gateway not initialized');
+    }
+
+    const receiveIdType = this.resolveReceiveIdType(chatId);
+
+    const response = await this.restClient.im.message.create({
+      params: { receive_id_type: receiveIdType },
+      data: { receive_id: chatId, content: cardContent, msg_type: 'interactive' },
+    });
+
+    if (response.code !== 0) {
+      throw new Error(`Feishu card send failed: ${response.msg || `code ${response.code}`}`);
+    }
+
+    this.status.lastOutboundAt = Date.now();
+  }
 }

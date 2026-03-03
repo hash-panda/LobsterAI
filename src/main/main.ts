@@ -13,7 +13,8 @@ import { saveCoworkApiConfig } from './libs/coworkConfigStore';
 import { generateSessionTitle, setStoreGetter as setCoworkUtilStoreGetter } from './libs/coworkUtil';
 import { ensureSandboxReady, getSandboxStatus, onSandboxProgress } from './libs/coworkSandboxRuntime';
 import { startCoworkOpenAICompatProxy, stopCoworkOpenAICompatProxy, setScheduledTaskDeps } from './libs/coworkOpenAICompatProxy';
-import { IMGatewayManager, IMPlatform, IMGatewayConfig, TunnelConfig } from './im';
+import { IMGatewayManager, IMPlatform, IMGatewayConfig, TunnelConfig, HinaNotificationConfig } from './im';
+import { initHinaCandidateStore, getHinaCandidateStore, HinaCandidate, HinaCandidateEvent, CandidateFilter, CandidateStats } from './hinaCandidateStore';
 import { APP_NAME } from './appConstants';
 import { getSkillServiceManager } from './skillServices';
 import { createTray, destroyTray, updateTrayMenu } from './trayManager';
@@ -1851,6 +1852,131 @@ if (!gotTheLock) {
     }
   });
 
+  // ==================== Hina Candidate IPC Handlers ====================
+
+  ipcMain.handle('hina:candidate:list', async (_event, filter?: CandidateFilter) => {
+    try {
+      const candidateStore = getHinaCandidateStore();
+      if (!candidateStore) {
+        return { success: false, error: 'Candidate store not initialized' };
+      }
+      const candidates = candidateStore.listCandidates(filter);
+      return { success: true, candidates };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to list candidates',
+      };
+    }
+  });
+
+  ipcMain.handle('hina:candidate:get', async (_event, candidateId: string) => {
+    try {
+      const candidateStore = getHinaCandidateStore();
+      if (!candidateStore) {
+        return { success: false, error: 'Candidate store not initialized' };
+      }
+      const candidate = candidateStore.getCandidateById(candidateId);
+      return { success: true, candidate };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get candidate',
+      };
+    }
+  });
+
+  ipcMain.handle('hina:candidate:getByPhone', async (_event, phone: string) => {
+    try {
+      const candidateStore = getHinaCandidateStore();
+      if (!candidateStore) {
+        return { success: false, error: 'Candidate store not initialized' };
+      }
+      const candidate = candidateStore.getCandidateByPhone(phone);
+      return { success: true, candidate };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get candidate by phone',
+      };
+    }
+  });
+
+  ipcMain.handle('hina:candidate:stats', async () => {
+    try {
+      const candidateStore = getHinaCandidateStore();
+      if (!candidateStore) {
+        return { success: false, error: 'Candidate store not initialized' };
+      }
+      const stats = candidateStore.getStats();
+      return { success: true, stats };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get candidate stats',
+      };
+    }
+  });
+
+  ipcMain.handle('hina:candidate:events', async (_event, candidateId: string) => {
+    try {
+      const candidateStore = getHinaCandidateStore();
+      if (!candidateStore) {
+        return { success: false, error: 'Candidate store not initialized' };
+      }
+      const events = candidateStore.getEvents(candidateId);
+      return { success: true, events };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get candidate events',
+      };
+    }
+  });
+
+  ipcMain.handle('hina:candidate:delete', async (_event, candidateId: string) => {
+    try {
+      const candidateStore = getHinaCandidateStore();
+      if (!candidateStore) {
+        return { success: false, error: 'Candidate store not initialized' };
+      }
+      candidateStore.deleteCandidate(candidateId);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete candidate',
+      };
+    }
+  });
+
+  // Hina notification configuration
+  ipcMain.handle('hina:notification:getConfig', async () => {
+    try {
+      const imManager = getIMGatewayManager();
+      const config = imManager.getHinaNotificationConfig();
+      return { success: true, config };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get Hina notification config',
+      };
+    }
+  });
+
+  ipcMain.handle('hina:notification:setConfig', async (_event, config: Partial<HinaNotificationConfig>) => {
+    try {
+      const imManager = getIMGatewayManager();
+      imManager.setHinaNotificationConfig(config);
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to set Hina notification config',
+      };
+    }
+  });
+
   ipcMain.handle('generate-session-title', async (_event, userInput: string | null) => {
     return generateSessionTitle(userInput);
   });
@@ -1915,6 +2041,14 @@ if (!gotTheLock) {
       return { success: true, path: null };
     }
     return { success: true, path: result.filePaths[0] };
+  });
+
+  ipcMain.handle('dialog:showMessageBox', async (event, options: Electron.MessageBoxOptions) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+    const result = ownerWindow
+      ? await dialog.showMessageBox(ownerWindow, options)
+      : await dialog.showMessageBox(options);
+    return result;
   });
 
   ipcMain.handle(
@@ -2429,6 +2563,10 @@ if (!gotTheLock) {
     console.log('[Main] initApp: starting initStore()');
     store = await initStore();
     console.log('[Main] initApp: store initialized');
+
+    // Initialize HinaCandidateStore
+    initHinaCandidateStore(store.getDatabase(), store.getSaveFunction());
+    console.log('[Main] initApp: HinaCandidateStore initialized');
 
     // Defensive recovery: app may be force-closed during execution and leave
     // stale running flags in DB. Normalize them on startup.

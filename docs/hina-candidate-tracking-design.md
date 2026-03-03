@@ -376,16 +376,16 @@ interface HinaEvaluationResult {
 
 ## 6. 开发计划
 
-### Phase 1: 数据层 + 事件处理 (基础)
-- [ ] 创建数据库表 (sqliteStore.ts)
-- [ ] 实现 HinaCandidateStore 类
-- [ ] 增强 webhook 事件处理，自动更新状态
-- [ ] 测试事件流转
+### Phase 1: 数据层 + 事件处理 (基础) ✅ 已完成
+- [x] 创建数据库表 (sqliteStore.ts)
+- [x] 实现 HinaCandidateStore 类
+- [x] 增强 webhook 事件处理，自动更新状态
+- [x] 测试事件流转
 
-### Phase 2: 通知系统
-- [ ] 实现飞书卡片通知模板
-- [ ] 实现应用内通知推送
-- [ ] 添加通知配置开关
+### Phase 2: 通知系统 ✅ 已完成
+- [x] 实现飞书卡片通知模板
+- [x] 实现应用内通知推送
+- [x] 添加通知配置开关
 
 ### Phase 3: 飞书对话集成
 - [ ] 增强意图识别（候选人相关指令）
@@ -393,12 +393,12 @@ interface HinaEvaluationResult {
 - [ ] 实现邀请候选人指令
 - [ ] 实现列表展示
 
-### Phase 4: UI 管理界面
-- [ ] 候选人列表组件
-- [ ] 候选人详情组件
-- [ ] 邀请表单组件
-- [ ] 报告查看器
-- [ ] 集成到主界面
+### Phase 4: UI 管理界面 ✅ 已完成
+- [x] 候选人列表组件
+- [x] 候选人详情组件
+- [x] 邀请表单组件
+- [x] 通知配置组件
+- [x] 集成到主界面
 
 ---
 
@@ -428,3 +428,10 @@ interface HinaTrackingConfig {
 | 日期 | 更新内容 |
 |------|---------|
 | 2026-02-28 | 初始版本，完成系统设计 |
+| 2026-02-28 | Phase 1 完成：数据层 + 事件处理 |
+| 2026-02-28 | 实现文件：`hinaCandidateStore.ts`、增强 `imGatewayManager.ts`、`sqliteStore.ts`、`main.ts`、`preload.ts` |
+| 2026-02-28 | Phase 2 完成：通知系统 |
+| 2026-02-28 | 新增类型：`HinaNotificationConfig`，新增方法：飞书卡片通知、应用内 IPC 通知、通知配置 |
+| 2026-02-28 | Phase 4 完成：UI 管理界面 |
+| 2026-02-28 | 新增组件：`CandidateList`、`CandidateDetail`、`CandidateForm`、`NotificationConfig`、`HinaCandidatesPage` |
+| 2026-02-28 | 新增服务：`hinaCandidateService`，新增 i18n 翻译（中/英） |

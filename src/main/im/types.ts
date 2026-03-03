@@ -475,3 +475,29 @@ export const DEFAULT_TUNNEL_STATUS: TunnelStatus = {
   error: null,
   startedAt: null,
 };
+
+// ==================== Hina Notification Config ====================
+
+export interface HinaNotificationConfig {
+  enabled: boolean;           // 是否启用通知
+  feishuEnabled: boolean;     // 飞书通知开关
+  appEnabled: boolean;        // 应用内通知开关
+  soundEnabled: boolean;      // 提示音开关
+  notifyOnCheckIn: boolean;   // 签到时通知
+  notifyOnStart: boolean;     // 面试开始时通知
+  notifyOnEnd: boolean;       // 面试结束时通知
+  notifyOnReport: boolean;    // 报告生成时通知
+  feishuChatId?: string;      // 指定发送的飞书群聊 ID
+}
+
+export const DEFAULT_HINA_NOTIFICATION_CONFIG: HinaNotificationConfig = {
+  enabled: true,
+  feishuEnabled: true,
+  appEnabled: true,
+  soundEnabled: false,
+  notifyOnCheckIn: true,
+  notifyOnStart: true,
+  notifyOnEnd: true,
+  notifyOnReport: true,
+  feishuChatId: undefined,
+};

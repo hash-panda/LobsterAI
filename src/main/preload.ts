@@ -218,6 +218,8 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke('dialog:selectFile', options),
     saveInlineFile: (options: { dataBase64: string; fileName?: string; mimeType?: string; cwd?: string }) =>
       ipcRenderer.invoke('dialog:saveInlineFile', options),
+    showMessageBox: (options: Electron.MessageBoxOptions) =>
+      ipcRenderer.invoke('dialog:showMessageBox', options),
   },
   shell: {
     openPath: (filePath: string) => ipcRenderer.invoke('shell:openPath', filePath),
@@ -314,5 +316,36 @@ contextBridge.exposeInMainWorld('electron', {
   },
   networkStatus: {
     send: (status: 'online' | 'offline') => ipcRenderer.send('network:status-change', status),
+  },
+  hinaCandidates: {
+    // Candidate CRUD
+    list: (filter?: { status?: string; phone?: string; name?: string; limit?: number; offset?: number }) =>
+      ipcRenderer.invoke('hina:candidate:list', filter),
+    get: (candidateId: string) => ipcRenderer.invoke('hina:candidate:get', candidateId),
+    getByPhone: (phone: string) => ipcRenderer.invoke('hina:candidate:getByPhone', phone),
+    getStats: () => ipcRenderer.invoke('hina:candidate:stats'),
+    getEvents: (candidateId: string) => ipcRenderer.invoke('hina:candidate:events', candidateId),
+    delete: (candidateId: string) => ipcRenderer.invoke('hina:candidate:delete', candidateId),
+
+    // Notification config
+    getNotificationConfig: () => ipcRenderer.invoke('hina:notification:getConfig'),
+    setNotificationConfig: (config: Partial<{
+      enabled: boolean;
+      feishuEnabled: boolean;
+      appEnabled: boolean;
+      soundEnabled: boolean;
+      notifyOnCheckIn: boolean;
+      notifyOnStart: boolean;
+      notifyOnEnd: boolean;
+      notifyOnReport: boolean;
+      feishuChatId?: string;
+    }>) => ipcRenderer.invoke('hina:notification:setConfig', config),
+
+    // Listen for notifications
+    onNotification: (callback: (notification: any) => void) => {
+      const handler = (_event: any, notification: any) => callback(notification);
+      ipcRenderer.on('hina:notification', handler);
+      return () => ipcRenderer.removeListener('hina:notification', handler);
+    },
   },
 });

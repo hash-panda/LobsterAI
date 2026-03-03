@@ -286,6 +286,7 @@ interface IElectronAPI {
     selectDirectory: () => Promise<{ success: boolean; path: string | null }>;
     selectFile: (options?: { title?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<{ success: boolean; path: string | null }>;
     saveInlineFile: (options: { dataBase64: string; fileName?: string; mimeType?: string; cwd?: string }) => Promise<{ success: boolean; path: string | null; error?: string }>;
+    showMessageBox: (options: Electron.MessageBoxOptions) => Promise<Electron.MessageBoxReturnValue>;
   };
   shell: {
     openPath: (filePath: string) => Promise<{ success: boolean; error?: string }>;
@@ -334,6 +335,17 @@ interface IElectronAPI {
   };
   networkStatus: {
     send: (status: 'online' | 'offline') => void;
+  };
+  hinaCandidates: {
+    list: (filter?: { status?: string; phone?: string; name?: string; limit?: number; offset?: number }) => Promise<{ success: boolean; candidates?: any[]; error?: string }>;
+    get: (candidateId: string) => Promise<{ success: boolean; candidate?: any | null; error?: string }>;
+    getByPhone: (phone: string) => Promise<{ success: boolean; candidate?: any | null; error?: string }>;
+    getStats: () => Promise<{ success: boolean; stats?: any; error?: string }>;
+    getEvents: (candidateId: string) => Promise<{ success: boolean; events?: any[]; error?: string }>;
+    delete: (candidateId: string) => Promise<{ success: boolean; error?: string }>;
+    getNotificationConfig: () => Promise<{ success: boolean; config?: any; error?: string }>;
+    setNotificationConfig: (config: Partial<any>) => Promise<{ success: boolean; error?: string }>;
+    onNotification: (callback: (notification: any) => void) => () => void;
   };
 }
 

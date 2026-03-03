@@ -212,6 +212,71 @@ export class SqliteStore {
         ON scheduled_task_runs(task_id, started_at DESC);
     `);
 
+    // Create Hina candidate tracking tables
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS hina_candidates (
+        id TEXT PRIMARY KEY,
+        phone TEXT NOT NULL,
+        name TEXT NOT NULL,
+        email TEXT,
+        position TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        interview_code TEXT,
+        interview_url TEXT,
+        report_url TEXT,
+        invited_at INTEGER,
+        check_in_at INTEGER,
+        interview_start_at INTEGER,
+        interview_end_at INTEGER,
+        report_generated_at INTEGER,
+        score_ai REAL,
+        audit_desc_ai TEXT,
+        report_data TEXT,
+        interview_name TEXT,
+        photo_url TEXT,
+        duration_seconds INTEGER,
+        question_count INTEGER,
+        answer_count INTEGER,
+        begin_time INTEGER,
+        login_time INTEGER,
+        submit_time INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+
+    this.db.run(`
+      CREATE INDEX IF NOT EXISTS idx_hina_candidates_phone
+        ON hina_candidates(phone);
+    `);
+
+    this.db.run(`
+      CREATE INDEX IF NOT EXISTS idx_hina_candidates_status
+        ON hina_candidates(status);
+    `);
+
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS hina_candidate_events (
+        id TEXT PRIMARY KEY,
+        candidate_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        event_data TEXT,
+        notified INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (candidate_id) REFERENCES hina_candidates(id) ON DELETE CASCADE
+      );
+    `);
+
+    this.db.run(`
+      CREATE INDEX IF NOT EXISTS idx_hina_events_candidate
+        ON hina_candidate_events(candidate_id);
+    `);
+
+    this.db.run(`
+      CREATE INDEX IF NOT EXISTS idx_hina_events_type
+        ON hina_candidate_events(event_type);
+    `);
+
     // Migrations - safely add columns if they don't exist
     try {
       // Check if execution_mode column exists
@@ -289,6 +354,56 @@ export class SqliteStore {
 
         if (!stColumns.includes('notify_platforms_json')) {
           this.db.run("ALTER TABLE scheduled_tasks ADD COLUMN notify_platforms_json TEXT NOT NULL DEFAULT '[]'");
+          this.save();
+        }
+      }
+    } catch {
+      // Migration not needed or table doesn't exist yet.
+    }
+
+    // Migration: Add new columns to hina_candidates for enhanced tracking
+    try {
+      const hinaColsResult = this.db.exec("PRAGMA table_info(hina_candidates);");
+      if (hinaColsResult[0]) {
+        const hinaColumns = hinaColsResult[0].values.map((row) => row[1]) || [];
+
+        if (!hinaColumns.includes('interview_name')) {
+          this.db.run('ALTER TABLE hina_candidates ADD COLUMN interview_name TEXT');
+          this.save();
+        }
+
+        if (!hinaColumns.includes('photo_url')) {
+          this.db.run('ALTER TABLE hina_candidates ADD COLUMN photo_url TEXT');
+          this.save();
+        }
+
+        if (!hinaColumns.includes('duration_seconds')) {
+          this.db.run('ALTER TABLE hina_candidates ADD COLUMN duration_seconds INTEGER');
+          this.save();
+        }
+
+        if (!hinaColumns.includes('question_count')) {
+          this.db.run('ALTER TABLE hina_candidates ADD COLUMN question_count INTEGER');
+          this.save();
+        }
+
+        if (!hinaColumns.includes('answer_count')) {
+          this.db.run('ALTER TABLE hina_candidates ADD COLUMN answer_count INTEGER');
+          this.save();
+        }
+
+        if (!hinaColumns.includes('begin_time')) {
+          this.db.run('ALTER TABLE hina_candidates ADD COLUMN begin_time INTEGER');
+          this.save();
+        }
+
+        if (!hinaColumns.includes('login_time')) {
+          this.db.run('ALTER TABLE hina_candidates ADD COLUMN login_time INTEGER');
+          this.save();
+        }
+
+        if (!hinaColumns.includes('submit_time')) {
+          this.db.run('ALTER TABLE hina_candidates ADD COLUMN submit_time INTEGER');
           this.save();
         }
       }
