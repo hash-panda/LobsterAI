@@ -11,6 +11,7 @@ import {
   TelegramConfig,
   DiscordConfig,
   NimConfig,
+  XiaomifengConfig,
   IMSettings,
   IMPlatform,
   IMSessionMapping,
@@ -21,6 +22,7 @@ import {
   DEFAULT_TELEGRAM_CONFIG,
   DEFAULT_DISCORD_CONFIG,
   DEFAULT_NIM_CONFIG,
+  DEFAULT_XIAOMIFENG_CONFIG,
   DEFAULT_IM_SETTINGS,
   DEFAULT_TUNNEL_CONFIG,
   DEFAULT_HINA_NOTIFICATION_CONFIG,
@@ -65,7 +67,7 @@ export class IMStore {
    * Migrate existing IM configs to ensure stable defaults.
    */
   private migrateDefaults(): void {
-    const platforms = ['dingtalk', 'feishu', 'telegram', 'discord', 'nim'] as const;
+    const platforms = ['dingtalk', 'feishu', 'telegram', 'discord', 'nim', 'xiaomifeng'] as const;
     let changed = false;
 
     for (const platform of platforms) {
@@ -166,6 +168,7 @@ export class IMStore {
     const telegram = this.getConfigValue<TelegramConfig>('telegram') ?? DEFAULT_TELEGRAM_CONFIG;
     const discord = this.getConfigValue<DiscordConfig>('discord') ?? DEFAULT_DISCORD_CONFIG;
     const nim = this.getConfigValue<NimConfig>('nim') ?? DEFAULT_NIM_CONFIG;
+    const xiaomifeng = this.getConfigValue<XiaomifengConfig>('xiaomifeng') ?? DEFAULT_XIAOMIFENG_CONFIG;
     const settings = this.getConfigValue<IMSettings>('settings') ?? DEFAULT_IM_SETTINGS;
 
     // Resolve enabled field: default to false for safety
@@ -185,6 +188,7 @@ export class IMStore {
       telegram: resolveEnabled(telegram, DEFAULT_TELEGRAM_CONFIG),
       discord: resolveEnabled(discord, DEFAULT_DISCORD_CONFIG),
       nim: resolveEnabled(nim, DEFAULT_NIM_CONFIG),
+      xiaomifeng: resolveEnabled(xiaomifeng, DEFAULT_XIAOMIFENG_CONFIG),
       settings: { ...DEFAULT_IM_SETTINGS, ...settings },
     };
   }
@@ -204,6 +208,9 @@ export class IMStore {
     }
     if (config.nim) {
       this.setNimConfig(config.nim);
+    }
+    if (config.xiaomifeng) {
+      this.setXiaomifengConfig(config.xiaomifeng);
     }
     if (config.settings) {
       this.setIMSettings(config.settings);
@@ -270,6 +277,18 @@ export class IMStore {
     this.setConfigValue('nim', { ...current, ...config });
   }
 
+  // ==================== Xiaomifeng Config ====================
+
+  getXiaomifengConfig(): XiaomifengConfig {
+    const stored = this.getConfigValue<XiaomifengConfig>('xiaomifeng');
+    return { ...DEFAULT_XIAOMIFENG_CONFIG, ...stored };
+  }
+
+  setXiaomifengConfig(config: Partial<XiaomifengConfig>): void {
+    const current = this.getXiaomifengConfig();
+    this.setConfigValue('xiaomifeng', { ...current, ...config });
+  }
+
   // ==================== IM Settings ====================
 
   getIMSettings(): IMSettings {
@@ -302,7 +321,24 @@ export class IMStore {
     const hasTelegram = !!config.telegram.botToken;
     const hasDiscord = !!config.discord.botToken;
     const hasNim = !!(config.nim.appKey && config.nim.account && config.nim.token);
-    return hasDingTalk || hasFeishu || hasTelegram || hasDiscord || hasNim;
+    const hasXiaomifeng = !!(config.xiaomifeng?.clientId && config.xiaomifeng?.secret);
+    return hasDingTalk || hasFeishu || hasTelegram || hasDiscord || hasNim || hasXiaomifeng;
+  }
+
+  // ==================== Notification Target Persistence ====================
+
+  /**
+   * Get persisted notification target for a platform
+   */
+  getNotificationTarget(platform: IMPlatform): any | null {
+    return this.getConfigValue<any>(`notification_target:${platform}`) ?? null;
+  }
+
+  /**
+   * Persist notification target for a platform
+   */
+  setNotificationTarget(platform: IMPlatform, target: any): void {
+    this.setConfigValue(`notification_target:${platform}`, target);
   }
 
   // ==================== Session Mapping Operations ====================
